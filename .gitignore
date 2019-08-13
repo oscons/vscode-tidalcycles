@@ -6,3 +6,5 @@ npm-debug.log
 /out/
 .vscode-test
 .DS_Store
+pebble/**/*.o
+pebble/**/*.hi
