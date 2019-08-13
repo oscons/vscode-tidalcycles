@@ -5,7 +5,7 @@ import { Config } from './config';
 import { Ghci, IGhci } from './ghci';
 import { Tidal, ITidal } from './tidal';
 import { History } from './history';
-
+import * as vscode from 'vscode';
 
 export function activate(context: ExtensionContext) {
     const config = new Config(context);
@@ -14,6 +14,21 @@ export function activate(context: ExtensionContext) {
     const ghci:IGhci = new Ghci(logger, config.useStackGhci(), config.ghciPath(), config.showGhciOutput());
     const tidal:ITidal = new Tidal(logger, ghci, config.bootTidalPath(), config.useBootFileInCurrentDirectory(), config.enablePebble(), config);
     const history = new History(logger, config);
+
+    const tidalStatusBarItem = window.createStatusBarItem(vscode.StatusBarAlignment.Right, 0);
+    tidalStatusBarItem.text = "Tidal";
+    tidalStatusBarItem.tooltip = "Tidal status: Unknown";
+    tidalStatusBarItem.color = 'rgb(0.5,0.5,0.5)';
+    tidalStatusBarItem.show();
+
+    tidal.on("stop", (e) => {
+        tidalStatusBarItem.tooltip = "Tidal status: Stopped";
+        tidalStatusBarItem.color = 'rgb(1.0,0.0,0.0)';
+    });
+    tidal.on("start", (e) => {
+        tidalStatusBarItem.tooltip = "Tidal status: Started";
+        tidalStatusBarItem.color = 'rgb(0.0,1.0,0.0)';
+    });
 
     function getRepl(repls: Map<TextEditor, Repl>, textEditor: TextEditor | undefined): Repl | undefined {
         if (textEditor === undefined) { return undefined; }
@@ -27,11 +42,11 @@ export function activate(context: ExtensionContext) {
     const repls = new Map<TextEditor, Repl>();
 
     if (config.showOutputInConsoleChannel()) {
-        ghci.addListener('out', (data: any) => {
+        ghci.on('data-out', (data: any) => {
             logger.log(`${data}`, false);
         });
 
-        ghci.addListener('error', (data: any) => {
+        ghci.on('data-error', (data: any) => {
             logger.warning(`GHCi | ${data}`);
         });
     }
@@ -57,7 +72,28 @@ export function activate(context: ExtensionContext) {
         }
     });
 
-    context.subscriptions.push(evalSingleCommand, evalMultiCommand, hushCommand);
+    const stopCommand = commands.registerCommand('tidal.stop', function () {
+        tidal.stop().catch((e) => {
+            vscode.window.showErrorMessage(""+e);
+        });
+    });
+
+    const restartCommand = commands.registerCommand('tidal.restart', function () {
+        tidal.stop().then(() => {
+            tidal.start().then(() => {
+                vscode.window.showInformationMessage("Tidal restarted");
+            })
+            .catch((e) => {
+                vscode.window.showErrorMessage(""+e);
+            });
+        });
+        
+    });
+
+    context.subscriptions.push(
+        evalSingleCommand, evalMultiCommand, hushCommand
+        , stopCommand, restartCommand
+    );
 }
 
 export function deactivate() { }
