@@ -43,15 +43,22 @@ export class Repl implements IRepl {
         const block = new TidalEditor(this.textEditor).getTidalExpressionUnderCursor(isMultiline);
         
         if (block) {
-            await this.tidal.sendTidalExpression(block.expression);
-            this.feedback(block.range);
-            this.history.log(block);
+            try {
+                await this.tidal.sendTidalExpression(block.expression);
+                this.feedback(block.range, false);
+                this.history.log(block);
+            }
+            catch(error){
+                this.feedback(block.range, true);
+                vscode.window.showErrorMessage(""+error);
+            }
+            
         }
     }
 
-    private feedback(range: vscode.Range): void {
+    private feedback(range: vscode.Range, isError: boolean): void {
         const flashDecorationType = this.createTextEditorDecorationType({
-            backgroundColor: this.config.feedbackColor()
+            backgroundColor: isError ? "rgb(1,0,0)" : this.config.feedbackColor()
         });
         this.textEditor.setDecorations(flashDecorationType, [range]);
         setTimeout(function () {
