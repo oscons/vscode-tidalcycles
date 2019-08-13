@@ -1,8 +1,14 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
 
 export class Config {
     getConfiguration = vscode.workspace.getConfiguration;
     configSection: string = 'tidalcycles';
+
+    constructor (
+        private context: vscode.ExtensionContext
+    ){
+    }
 
     public bootTidalPath(): string | null {
         return this.getConfiguration(this.configSection).get('bootTidalPath', null);
@@ -34,5 +40,20 @@ export class Config {
 
     public useStackGhci(): boolean {
         return this.getConfiguration(this.configSection).get('useStackGhci', false);
+    }
+
+    public enablePebble(): boolean {
+        return this.getConfiguration(this.configSection).get('pebble.enable', false);
+    }
+
+    public getExtensionFileUri(filePath:string[] | string): vscode.Uri {
+        let pathComponents;
+        if(typeof filePath === 'string'){
+            pathComponents = [filePath];
+        }
+        else {
+            pathComponents = filePath;
+        }
+        return vscode.Uri.file(path.join(this.context.extensionPath, ...pathComponents));
     }
 }

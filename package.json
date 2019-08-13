@@ -32,6 +32,14 @@
             {
                 "command": "tidal.hush",
                 "title": "Tidal Hush"
+            },
+            {
+                "command": "tidal.stop",
+                "title": "Tidal Stop"
+            },
+            {
+                "command": "tidal.restart",
+                "title": "Tidal Restart"
             }
         ],
         "keybindings": [
@@ -101,6 +109,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Use the GHCi instance provided by Stack in the current folder. If false, use the system-wide GHCi path."
+                },
+                "tidalcycles.pebble.enable": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable the Pebble interface to the Tidal process. This is required for some advanced functionality like displaying patterns in the pattern view."
                 }
             }
         }

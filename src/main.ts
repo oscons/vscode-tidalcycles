@@ -1,18 +1,18 @@
 import { TextEditor, ExtensionContext, window, commands } from 'vscode';
 import { Repl } from './repl';
-import { Logger } from './logging';
+import { Logger, ILogger } from './logging';
 import { Config } from './config';
-import { Ghci } from './ghci';
-import { Tidal } from './tidal';
+import { Ghci, IGhci } from './ghci';
+import { Tidal, ITidal } from './tidal';
 import { History } from './history';
 
 
 export function activate(context: ExtensionContext) {
-    const config = new Config();
-    const logger = new Logger(window.createOutputChannel('TidalCycles'));
+    const config = new Config(context);
+    const logger:ILogger = new Logger(window.createOutputChannel('TidalCycles'));
 
-    const ghci = new Ghci(logger, config.useStackGhci(), config.ghciPath(), config.showGhciOutput());
-    const tidal = new Tidal(logger, ghci, config.bootTidalPath(), config.useBootFileInCurrentDirectory());
+    const ghci:IGhci = new Ghci(logger, config.useStackGhci(), config.ghciPath(), config.showGhciOutput());
+    const tidal:ITidal = new Tidal(logger, ghci, config.bootTidalPath(), config.useBootFileInCurrentDirectory(), config.enablePebble(), config);
     const history = new History(logger, config);
 
     function getRepl(repls: Map<TextEditor, Repl>, textEditor: TextEditor | undefined): Repl | undefined {
@@ -27,11 +27,11 @@ export function activate(context: ExtensionContext) {
     const repls = new Map<TextEditor, Repl>();
 
     if (config.showOutputInConsoleChannel()) {
-        ghci.stdout.on('data', (data: any) => {
+        ghci.addListener('out', (data: any) => {
             logger.log(`${data}`, false);
         });
 
-        ghci.stderr.on('data', (data: any) => {
+        ghci.addListener('error', (data: any) => {
             logger.warning(`GHCi | ${data}`);
         });
     }

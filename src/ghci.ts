@@ -4,12 +4,17 @@ import * as vscode from 'vscode';
 import * as split2 from 'split2';
 import { EOL } from 'os';
 import { Stream } from 'stream';
+import { EventEmitter } from 'events';
+import { callbackToPromise } from './util';
 
 /**
  * Provides an interface for sending commands to a GHCi session.
  */
 export interface IGhci {
-    writeLn(command: string): void;
+    writeLn(command: string): Promise<void>;
+    getId(): string | null;
+    sendPebbleRequest(request:string): Promise<string>;
+    addListener(type:string, listener:Function): void;
 }
 
 export class Ghci implements IGhci {
@@ -17,11 +22,29 @@ export class Ghci implements IGhci {
     public readonly stdout: Stream = new Stream();
     public readonly stderr: Stream = new Stream();
 
+    private emitter: EventEmitter = new EventEmitter();
+
     constructor(
         private logger: ILogger,
         private useStack: boolean,
         private ghciPath: string,
         private showGhciOutput: boolean) {
+    }
+
+    public addListener(type:string, listener:Function): void{
+        this.emitter.addListener(type, listener);
+    }
+
+    public getId(): string | null {
+        const currentProcess = this.getGhciProcess();
+        if(currentProcess === null){
+            return(null);
+        }
+        return "pid:" + currentProcess.pid;
+    }
+
+    public sendPebbleRequest(request:string): Promise<string> {
+        return Promise.reject("not implemented");
     }
 
     private getGhciProcess(): ChildProcess {
@@ -51,24 +74,26 @@ export class Ghci implements IGhci {
 
         this.ghciProcess.stderr.pipe(split2()).on('data', (data: any) => {
             this.stderr.emit('data', data);
+            this.emitter.emit('out', data);
         });
         this.ghciProcess.stdout.on('data', (data: any) => {
             this.stdout.emit('data', data);
+            this.emitter.emit('error', data);
         });
+
+        this.logger.log(`GHCI started. PID: ${this.ghciProcess.pid}\n`);
+
         return this.ghciProcess;
     }
 
-    private write(command: string) {
-        try {
-            let ghciProcess = this.getGhciProcess();
-            ghciProcess.stdin.write(command);
-        } catch (e) {
-            this.logger.error(`Failed to get GHCi process: ${e}`);
-            return;
-        }
+    private write(command: string): Promise<void> {
+        return callbackToPromise(x => {
+            const ghciProcess = this.getGhciProcess();
+            ghciProcess.stdin.write(command, x);
+        });
     }
 
-    public writeLn(command: string) {
-        this.write(`${command}${EOL}`);
+    public writeLn(command: string): Promise<void> {
+        return this.write(`${command}${EOL}`);
     }
 }
