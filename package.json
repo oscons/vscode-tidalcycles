@@ -101,6 +101,16 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Use the GHCi instance provided by Stack in the current folder. If false, use the system-wide GHCi path."
+                }, "tidalcycles.evalStrategy": {
+                    "type": "string"
+                    , "default": "default"
+                    , "markdownDescription": "Select an evaluation strategy that governs what happens when you 'evaluate' a single or multipe lines in the editor."
+                    , "enum": [
+                        "default"
+                    ]
+                    , "enumDescriptions": [
+                        "The default evaluation strategy of the TidalCycles VS Code extension"
+                    ]
                 }
             }
         }

@@ -35,4 +35,9 @@ export class Config {
     public useStackGhci(): boolean {
         return this.getConfiguration(this.configSection).get('useStackGhci', false);
     }
+
+    public evalStrategy(): string {
+        return this.getConfiguration(this.configSection).get("evalStrategy", "default");
+    }
+
 }

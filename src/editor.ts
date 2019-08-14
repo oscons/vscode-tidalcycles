@@ -1,5 +1,6 @@
 import {Range, TextEditor, TextDocument, Selection} from 'vscode';
 import { ReplSelectionType } from './repl';
+import { Config } from './config';
 
 /**
  * Represents a single expression to be executed by Tidal.
@@ -18,20 +19,35 @@ export interface ISelectionStrategy {
     getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression | null;
 }
 
+export interface Type<T> extends Function {
+    new (...args: any[]): T;
+}
+
 /**
  * Represents a document of Tidal commands.
  */
-export class TidalEditor {
-
-    private strategy: ISelectionStrategy = new DefaultSelectionStrategy();
+export class TidalEditor {    
+    private availableStrategies = new Map<string, Type<ISelectionStrategy>>();
 
     constructor(
         private editor: TextEditor
+        , private config: Config
     ) {
+        this.availableStrategies.set("default", DefaultSelectionStrategy);
+    }
+
+    private getStrategy(name: string): ISelectionStrategy {
+        const strategy = this.availableStrategies.get(name);
+        if(typeof strategy === 'undefined' || strategy === null){
+            return new DefaultSelectionStrategy();
+        }
+        return new strategy();
     }
 
     public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression | null {
-        return this.strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
+        const strategy = this.getStrategy(this.config.evalStrategy());
+
+        return strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
     }    
 }
 
