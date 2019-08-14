@@ -21,7 +21,7 @@ function genContext(
     , pos1:number[]=[1,0]
     , pos2:number[]=[1,2]
 ):TestContext {
-    let mockDocument = createMockDocument(document)
+    const mockDocument = createMockDocument(document);
     mockDocument.setup(d => d.fileName).returns(() => fileName);
     return {
         mockTidal: TypeMoq.Mock.ofType<ITidal>()
