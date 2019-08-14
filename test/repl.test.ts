@@ -1,6 +1,6 @@
-import { Position, Selection, TextEditorDecorationType, DecorationRenderOptions, TextEditor, TextDocument } from 'vscode';
+import { TextEditorDecorationType, DecorationRenderOptions, TextEditor, TextDocument } from 'vscode';
 import * as TypeMoq from 'typemoq';
-import { createMockDocument, createMockEditor, createMockCreateTextEditorDecorationType } from './mock';
+import { createMockCreateTextEditorDecorationType, getSelectionContext } from './mock';
 import { Repl, ReplSelectionType } from '../src/repl';
 import { ITidal } from '../src/tidal';
 import { IHistory } from '../src/history';
@@ -17,17 +17,17 @@ type TestContext = ({
 
 function genContext(
     fileName:string='myfile.tidal'
-    , document:string[]=['Foo','bar','','baz']
-    , pos1:number[]=[1,0]
-    , pos2:number[]=[1,2]
+    , document:string[]=['Foo','?bar','','baz']
+    , pos:number | number[]=0
 ):TestContext {
-    const mockDocument = createMockDocument(document);
-    mockDocument.setup(d => d.fileName).returns(() => fileName);
+    const selectionContext = getSelectionContext(document, pos);
+
+    selectionContext.mockDocument.setup(d => d.fileName).returns(() => fileName);
     return {
         mockTidal: TypeMoq.Mock.ofType<ITidal>()
         , mockConfig: TypeMoq.Mock.ofType<Config>()
-        , mockDocument
-        , mockEditor: createMockEditor(mockDocument.object, new Selection(new Position(pos1[0], pos1[1]), new Position(pos2[0], pos2[1])))
+        , mockDocument: selectionContext.mockDocument
+        , mockEditor: selectionContext.mockEditor
         , mockHistory: TypeMoq.Mock.ofType<IHistory>()
         , mockCreateTextEditorDecorationType: createMockCreateTextEditorDecorationType()
     };

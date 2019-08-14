@@ -1,10 +1,105 @@
-import { Position, Selection, TextDocument, TextEditor } from 'vscode';
-import { expect, assert } from 'chai';
-import { TidalEditor } from '../src/editor';
-import { createMockDocument, createMockEditor } from './mock';
+import { assert } from 'chai';
+import { genDocInfo } from './mock';
+
+import { getSelectionContext } from './mock';
+import { TextDocument, TextEditor } from 'vscode';
+
 import { Config } from '../src/config';
 import * as TypeMoq from 'typemoq';
+
+import { expect } from 'chai';
 import { ReplSelectionType } from '../src/repl';
+import { TidalEditor } from '../src/editor';
+
+
+suite("Editor genDocInfo", () => {
+    test("Document from one string", () => {
+        const myTestDoc = genDocInfo(`
+let x ?_a?= 1
+let y = 4
+    z = 2
+
+do
+    let a = 1
+    let b = 1
+?
+do
+    let v = 1
+    let w = 2?_c?
+        `);
+        assert.equal(myTestDoc.doc.length, 13);
+        assert.equal(myTestDoc.doc[1], "let x = 1");
+        assert.equal(myTestDoc.doc[8], "");
+        assert.equal(myTestDoc.doc[11], "    let w = 2");
+
+        const pos = {"a": [1, 6], "1": [8, 0], "2": [11, 13]};
+        Object.entries(pos).forEach(([k, v]) => {
+            const m = myTestDoc.marks.get(k);
+            assert.exists(m);
+            if(typeof m !== 'undefined' && m !== null){
+                assert.equal(m.join(","), v.join(","));
+            }
+        });
+
+        const selCtx = getSelectionContext(myTestDoc, [1, 2]);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.line, 8);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
+        assert.equal(selCtx.mockEditor.object.selection.end.line, 11);
+        assert.equal(selCtx.mockEditor.object.selection.end.character, 13);
+
+    });
+
+    test("Document from array single", () => {
+        const doc = ["", "one", "two", "? ", "three"];
+        const myTestDoc = genDocInfo(doc);
+
+        assert.equal(myTestDoc.doc.length, 5);
+        assert.equal(myTestDoc.doc[1], "one");
+        assert.equal(myTestDoc.doc[3], " ");
+
+        const pos = {"0": [3, 0]};
+        Object.entries(pos).forEach(([k, v]) => {
+            const m = myTestDoc.marks.get(k);
+            assert.exists(m);
+            if(typeof m !== 'undefined' && m !== null){
+                assert.equal(m.join(","), v.join(","));
+            }
+        });
+
+        const selCtx = getSelectionContext(doc, 0);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.line, 3);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
+
+    });
+    
+    test("Document from array multi", () => {
+        const doc = ["", "?one", "two", " ?", "three"];
+        const myTestDoc = genDocInfo(doc);
+
+        assert.equal(myTestDoc.doc.length, 5);
+        assert.equal(myTestDoc.doc[1], "one");
+        assert.equal(myTestDoc.doc[3], " ");
+
+        const pos = {"0": [1, 0], "1": [3, 1]};
+        Object.entries(pos).forEach(([k, v]) => {
+            const m = myTestDoc.marks.get(k);
+            assert.exists(m);
+            if(typeof m !== 'undefined' && m !== null){
+                assert.equal(m.join(","), v.join(","));
+            }
+        });
+
+        const selCtx = getSelectionContext(doc, [0,1]);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.line, 1);
+        assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
+        assert.equal(selCtx.mockEditor.object.selection.end.line, 3);
+        assert.equal(selCtx.mockEditor.object.selection.end.character, 1);
+
+    });
+
+
+    
+});
 
 type TestContext = ({
     mockConfig: TypeMoq.IMock<Config>
@@ -12,30 +107,28 @@ type TestContext = ({
    , mockEditor: TypeMoq.IMock<TextEditor>
 });
 
-function genContext(
-    document:string[]
-    , pos1:number[]=[1,0]
-    , pos2:number[]=[1,2]
-    , strategy:string="default"
-): TestContext {
+function generateContext(doc:string | string[], pos:(number | number[] | string | string[]), strategy:string="default"): TestContext {
+    const selectionContext = getSelectionContext(doc, pos);
+
     const mockConfig = TypeMoq.Mock.ofType<Config>();
-    mockConfig.setup(x => x.evalStrategy()).returns(() => strategy);
+    mockConfig.setup(x => x.evalStrategy()).returns(x => strategy);
 
-    const mockDocument = createMockDocument(document)
-
-    return ({
+    return {
         mockConfig
-        , mockDocument
-        , mockEditor: createMockEditor(mockDocument.object, new Selection(new Position(pos1[0], pos1[1]), new Position(pos2[0], pos2[1])))
-    });
+        , mockDocument: selectionContext.mockDocument
+        , mockEditor: selectionContext.mockEditor
+    };
 }
 
-suite("Editor", () => {
-    test("Single-line expression retrieved", () => {
-        const ctx = genContext(["Hello world"], [0,0],[0,0]);
+function getExpression(ctx:TestContext, selectionType:ReplSelectionType){
+    let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
+    return tidalEditor.getTidalExpressionUnderCursor(selectionType);
+}
 
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.SINGLE);
+suite("Editor [Strategy: default]", () => {
+    test("Single-line expression retrieved", () => {
+        const ctx = generateContext("?Hello world", 0, "default");
+        let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
         assert.isNotNull(expression);
         if (expression !== null) {
@@ -44,10 +137,9 @@ suite("Editor", () => {
     });
 
     test("Single-line expression between blank lines retrieved", () => {
-        const ctx = genContext(["", "Hello world", ""], [1,0],[1,0]);
+        const ctx = generateContext(["", "?Hello world", ""], 0, "default");
 
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.SINGLE);
+        let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
         assert.isNotNull(expression);
         if (expression !== null) {
@@ -56,19 +148,17 @@ suite("Editor", () => {
     });
 
     test("Blank line becomes null expression", () => {
-        const ctx = genContext(["", "Hello world", ""], [0,0],[0,0]);
+        const ctx = generateContext(["?", "Hello world", ""], 0, "default");
         
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.SINGLE);
+        let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
         assert.isNull(expression);
     });
 
     test("Multi-line expression retrieved", () => {
-        const ctx = genContext(["", "one", "two", " ", "three"], [1,0],[1,0]);
+        const ctx = generateContext(["", "?one", "two", " ", "three"], 0, "default");
     
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.MULTI);
+        let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
         assert.isNotNull(expression);
         if (expression !== null) {
@@ -77,10 +167,9 @@ suite("Editor", () => {
     });
 
     test("Multi-line expression from split selection", () => {
-        const ctx = genContext(["", "one", "two", " ", "three"], [1,0],[4,5]);
+        const ctx = generateContext(["", "?one", "two", " ", "three?"], [0, 1], "default");
         
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.MULTI);
+        let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
         assert.isNotNull(expression);
         if (expression !== null) {
@@ -89,10 +178,9 @@ suite("Editor", () => {
     });
 
     test("Multi-line expression retrieved before selection", () => {
-        const ctx = genContext(["", "one", "two", " ", "three"], [1,0],[4,2]);
+        const ctx = generateContext(["", "?one", "two", " ", "th?ree"], [0, 1], "default");
         
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.MULTI);
+        let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
         assert.isNotNull(expression);
         if (expression !== null) {
@@ -101,10 +189,9 @@ suite("Editor", () => {
     });
 
     test("Multi-line expression becomes null from blank line", () => {
-        const ctx = genContext(["", "one", "two", " ", "three"], [3,0],[3,0]);
+        const ctx = generateContext(["", "one", "two", "? ", "three"], 0, "default");
         
-        let tidalEditor = new TidalEditor(ctx.mockEditor.object, ctx.mockConfig.object);
-        let expression = tidalEditor.getTidalExpressionUnderCursor(ReplSelectionType.MULTI);
+        let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
         assert.isNull(expression);
     });

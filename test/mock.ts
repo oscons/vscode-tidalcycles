@@ -71,3 +71,109 @@ export function createMockCreateTextEditorDecorationType():
     mockCreateTextEditorDecorationType.setup(f => f(TypeMoq.It.isAny())).returns(() => mockTextEditorDecorationType.object);
     return mockCreateTextEditorDecorationType;
 }
+
+export type TestDocInfo = ({
+    doc: string[]
+    , marks: Map<string, number[]>
+})
+
+export function genDocInfo(s:string | string[]): TestDocInfo {
+    const ret: TestDocInfo = {
+        doc: []
+        , marks: new Map<string, number[]>()
+    }
+    if(typeof s === 'string'){
+        ret.doc = s.split(/\r?\n/);
+    }
+    else {
+        ret.doc = s;
+    }
+    let cnt = 0;
+    const ndoc: string[] = [];
+    for(let i=0;i<ret.doc.length;i++){
+        let l = ret.doc[i];
+        let m: RegExpExecArray | null;
+        /*
+        Find patterns that are either a single question mark or a string in the
+        form of ?_XXXX? where the XXXX part is treated as a name for the mark.
+        */
+        const rex = /[?](_([^?]+)[?])?/;
+        
+        while((m = rex.exec(l)) !== null){
+            if(typeof m[2] !== 'undefined'){
+                ret.marks.set(m[2], [i, m.index]);
+            }
+            ret.marks.set(""+cnt, [i, m.index]);
+            
+            l = l.substr(0, m.index) + l.substr(m.index+m[0].length);
+            cnt ++;
+        }
+        ndoc[i] = l;
+    }
+    ret.doc = ndoc;
+    return ret;
+}
+
+export type TestEditorContext = ({
+    mockDocument: TypeMoq.IMock<TextDocument>
+    , mockEditor: TypeMoq.IMock<TextEditor>
+});
+
+function generateEditorContext(
+    document:string[]
+    , pos1:number[]
+    , pos2:number[]
+): TestEditorContext {
+    const mockDocument = createMockDocument(document)
+
+    return ({
+        mockDocument
+        , mockEditor: createMockEditor(mockDocument.object, new Selection(new Position(pos1[0], pos1[1]), new Position(pos2[0], pos2[1])))
+    });
+}
+
+export function getSelectionContext(
+    doc:string | string[] | TestDocInfo
+    , selectionPositions:(string | number | string[] | number[])
+): TestEditorContext{
+    let docInfo: TestDocInfo = {doc:[], marks: new Map<string, number[]>()};
+
+    if(typeof doc === 'string' || Array.isArray(doc)){
+        docInfo = genDocInfo(doc);
+    }
+    else {
+        docInfo = doc;
+    }
+
+    let pos: (number[]|undefined)[] = [];
+
+    if(typeof selectionPositions === 'string'){
+        pos = [docInfo.marks.get(selectionPositions)];
+    }
+    else if(typeof selectionPositions === 'number'){
+        pos = [docInfo.marks.get(""+selectionPositions)];
+    }
+    else if(Array.isArray(selectionPositions)){
+        const sa: any[] = selectionPositions;
+        pos = sa.map(x => {
+            if(typeof x === "string"){
+                return docInfo.marks.get(x);
+            }
+            return docInfo.marks.get(""+x);
+        });
+    }
+    
+    let xordef = (x:undefined | number[], d: number[]): number[] => typeof x === 'undefined' ? d : x;
+
+    let pos1: number[] = [0,0];
+    let pos2: number[] = pos1;
+    if(pos.length > 0){
+        pos1 = xordef(pos[0], pos1);
+    }
+    pos2 = pos1;
+    if(pos.length > 1){
+        pos2 = xordef(pos[1], pos2);
+    }
+    
+    return generateEditorContext(docInfo.doc, pos1, pos2);
+}
