@@ -163,7 +163,7 @@ suite("Editor", () => {
             });
         });
         const testDoc = `
-?_a?on?_b?e
+?_a?on?_b?e--no comment1
 t?_c?wo
   ?_bl1?  ?_bl2?
    ?_bl3?
@@ -171,17 +171,20 @@ t?_c?wo
 three
 
 do
-  
+...
     f?_d?ou?_e?r
-        fi?_f?ve
-
-    six
+............
+        fi?_f?ve --no comment2
+?_bl6?
+:sixer
 do
     seven
-        `;
+        `.replace(/[.]/g,' ').replace(/:/g,"\t");
         const tests: TestInfo[] = [
-                {l:"No selection, one line, blank, between blocks", sel: "bl3"
+                {l:"No selection, one line, blank, far between blocks", sel: "bl3"
                     , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
+                , {l:"No selection, one line, blank, close between blocks", sel: "bl6"
+                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    sixer"])}
                 , {l:"No selection, one line, blank, above block", sel: "bl4"
                     , res: bm(ReplSelectionType.SINGLE, "three", ReplSelectionType.MULTI, "three")}
                 , {l:"No selection, one line, blank, below block", sel: "bl1"
@@ -199,7 +202,7 @@ do
                 , {l:"With selection, multi line", sel: ["a","c"]
                     , res: bm(ReplSelectionType.SINGLE, ["one", "t"], ReplSelectionType.MULTI, ["one","two"])}
                 , {l:"No selection, one line, indented", sel: "d"
-                    , res: bm(ReplSelectionType.SINGLE, "four", ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    six"])}
+                    , res: bm(ReplSelectionType.SINGLE, "four", ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    sixer"])}
                 , {l:"With selection, one line, indented", sel: ["d","e"]
                     , res: bm(ReplSelectionType.SINGLE, "ou", ReplSelectionType.MULTI, ["four\r\n    five"])}
                 , {l:"With selection, multi line, indented", sel: ["d","f"]

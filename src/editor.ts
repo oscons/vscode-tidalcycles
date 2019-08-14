@@ -47,7 +47,7 @@ export class TidalEditor {
         if(typeof strategy === 'undefined' || strategy === null){
             return new DefaultSelectionStrategy();
         }
-        return new strategy();
+        return new strategy(this.config);
     }
 
     public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression[] | null {
@@ -58,6 +58,7 @@ export class TidalEditor {
 }
 
 class DefaultSelectionStrategy implements ISelectionStrategy {
+
     private isEmpty(document: TextDocument, line: number): boolean {
         return document.lineAt(line).text.trim().length === 0;
     }
@@ -149,6 +150,10 @@ export function numLeadingWhitespace(s:string, tabWidth:number=4){
 }
 
 class FuzzySelectionStrategy implements ISelectionStrategy{
+    private tabWidth = 4;
+
+    constructor(
+    ){}
 
     public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null {
         const nothingSelected = (selection.start.line == selection.end.line && selection.start.character == selection.end.character);
@@ -156,7 +161,7 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
         let range = new Range(selection.start.line, selection.start.character, selection.end.line, selection.end.character);
 
         if(nothingSelected){
-            let newRange = FuzzySelectionStrategy.checkLineAboveOrBelow(selection.end.line, document);
+            let newRange = FuzzySelectionStrategy.checkLineAboveOrBelow(selection.end.line, document, selectionType === ReplSelectionType.MULTI);
             if(newRange === null){
                 return [];
             }
@@ -168,78 +173,86 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
             if(nothingSelected){
                  range = new Range(range.start.line, range.start.character, range.end.line, document.lineAt(range.end.line).text.length);
             }
-            else {
-                // nothing to do here, the user specifically selecte what she wanted
-            }
         }
         else {
-            let startIndent = numLeadingWhitespace(document.lineAt(range.start.line).text);
+            let startIndent = this._numLeadingWhitespace(document.lineAt(range.start.line).text);
+            let selectionEndIndent = this._numLeadingWhitespace(document.lineAt(range.end.line).text);
+            
             let startLine = range.start.line;
-            for(let sl = startLine-1;sl>=0;sl--){
-                const line = document.lineAt(sl).text;
-                if(startIndent == 0){
-                    // TODO: Decide if comment-only lines should cause a break as well. Maybe worth a config item
-                    if(
-                        line.trim() === ''
-                        || numLeadingWhitespace(line) > startIndent
-                        || (!nothingSelected && numLeadingWhitespace(line) <= startIndent)
-                        ){
-                        startLine = sl+1;
-                        break;
+            if( nothingSelected
+                || document.lineAt(range.start.line).text.trim() !== ''
+                || range.end.line === range.start.line
+            ){
+                for(let sl = startLine-1;sl>=0;sl--){
+                    const line = document.lineAt(sl).text;
+                    if(startIndent == 0){
+                        // TODO: Decide if comment-only lines should cause a break as well. Maybe worth a config item
+                        if(
+                            line.trim() === ''
+                            || this._numLeadingWhitespace(line) > startIndent
+                            || (!nothingSelected && this._numLeadingWhitespace(line) <= startIndent)
+                            ){
+                            startLine = sl+1;
+                            break;
+                        }
                     }
-                }
-                else {
-                    const lineWs = numLeadingWhitespace(line);
-                    if(lineWs == 0 || (!nothingSelected && numLeadingWhitespace(line) <= startIndent)){
+                    else {
+                        const lineWs = this._numLeadingWhitespace(line);
+                        if(lineWs == 0 || (!nothingSelected && this._numLeadingWhitespace(line) <= startIndent)){
+                            startLine = sl;
+                            break;
+                        }
+                    }
+                    if(sl == 0){
                         startLine = sl;
-                        break;
                     }
-                }
-                if(sl == 0){
-                    startLine = sl;
-                }
-            }
-
-            startIndent = numLeadingWhitespace(document.lineAt(nothingSelected ? startLine : range.end.line).text);
-            let selectionEndIndent = numLeadingWhitespace(document.lineAt(range.end.line).text);
-            let endLine = range.end.line;
-            for(let sl = endLine+1;sl<document.lineCount;sl++){
-                const line = document.lineAt(sl).text;
-
-                if(line.trim() === ''){
-                    if(selectionEndIndent === 0){
-                        endLine = sl-1;
-                        break;
-                    }
-                    continue;
-                }
-
-                const lineWs = numLeadingWhitespace(line);
-                if(
-                    lineWs < startIndent
-                    || (nothingSelected && selectionEndIndent > 0 && lineWs == 0)
-                    || (!nothingSelected && lineWs <= selectionEndIndent)
-                ){
-                    endLine = sl-1;
-                    break;
-                }
-
-                if(sl === document.lineCount-1){
-                    endLine = sl;
                 }
             }
             
+            let endLine = range.end.line;
+            if( nothingSelected
+                || document.lineAt(range.end.line).text.trim() !== ''
+                || range.end.line === range.start.line
+            ) {
+                startIndent  = this._numLeadingWhitespace(document.lineAt(nothingSelected ? startLine : range.end.line).text);
+                for(let sl = endLine+1;sl<document.lineCount;sl++){
+                    const line = document.lineAt(sl).text;
+
+                    if(line.trim() === ''){
+                        if(selectionEndIndent === 0){
+                            endLine = sl-1;
+                            break;
+                        }
+                        continue;
+                    }
+
+                    const lineWs = this._numLeadingWhitespace(line);
+                    if(
+                        lineWs < startIndent
+                        || (nothingSelected && selectionEndIndent > 0 && lineWs == 0)
+                        || (!nothingSelected && lineWs <= selectionEndIndent)
+                    ){
+                        endLine = sl-1;
+                        break;
+                    }
+
+                    if(sl === document.lineCount-1){
+                        endLine = sl;
+                    }
+                }
+            }
+                
             range = new Range(startLine, 0, endLine, document.lineAt(endLine).text.length);
         }
 
-        return FuzzySelectionStrategy.splitIntoTidalChunks(document, range)
+        return this.splitIntoTidalChunks(document, range)
             .map(c => {
                 return new TidalExpression(c.l.join("\r\n"), c.r);
             })
             .filter(x => typeof x !== 'undefined' && x.expression.trim() !== '');
     }
 
-    private static splitIntoTidalChunks(document: TextDocument, selection:Range): ({r:Range,l:string[]})[] {
+    private splitIntoTidalChunks(document: TextDocument, selection:Range): ({r:Range,l:string[]})[] {
         const ret: ({r:Range,l:string[]})[] = [];
 
         /*
@@ -258,24 +271,21 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
         let lineOneIndented = false;
         let indent = -1;
         for(let i=0;i<lines.length;i++){
-            if(indent == 0){
-                break;
-            }
             // remove comments and blanks at end of line
+            lines[i] = lines[i].replace(/\t/g, "".padEnd(this.tabWidth, " "));
             lines[i] = lines[i].replace(/\s*--.*$/, '').replace(/\s+$/,'');
-            if(lines[i].length === 0){
+            if(lines[i].length === 0 || indent == 0){
                 continue;
             }
 
-            const lindent = numLeadingWhitespace(lines[i]);
-            if(i == 0){
-                lineOneIndented = lindent > 0;
-            }
+            const lindent = this._numLeadingWhitespace(lines[i]);
             
             if(indent === -1){
+                lineOneIndented = lindent > 0;
+
                 if(selection.start.character > 0){
-                    let realFirstLine = document.lineAt(selection.start.character).text;
-                    indent = numLeadingWhitespace(realFirstLine);
+                    let realFirstLine = document.lineAt(selection.start.line).text;
+                    indent = this._numLeadingWhitespace(realFirstLine);
                 }
                 else {
                     indent = lindent;
@@ -291,21 +301,23 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
             if(i == 0 && !lineOneIndented){
                 continue
             }
-            lines[i] = lines[i].substr(indent);
+            if(lines[i].length >= indent){
+                lines[i] = lines[i].substr(indent);
+            }
         }
 
         const lastline = (x:number) => x >= lines.length-1;
 
         let blockStart = -1;
-        let lastNotEmpty = 0;
+        let lastNotEmpty = -1;
         for(let i=0;i<lines.length;i++){
             const line = lines[i];
-            const lindent = numLeadingWhitespace(line);
+            const lindent = this._numLeadingWhitespace(line);
 
             if(lindent === 0){
                 if(line.length > 0){
                     if(blockStart >= 0){
-                        const blockEnd = Math.min(i-1,lastNotEmpty);
+                        const blockEnd = Math.min(Math.max(i-1,0),lastNotEmpty);
                         ret.push({
                             r: new Range(
                                 selection.start.line+blockStart,indent
@@ -318,37 +330,49 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
                     lastNotEmpty = i;
                     if(!lastline(i)){
                         blockStart = i;
+                        lastNotEmpty = i;
                         continue;
                     }
                 }
             }
         
+            if(line.trim().length > 0){
+                lastNotEmpty = i;
+                if(blockStart < 0){
+                    blockStart = i;
+                }
+            }
+
             // last line
             if(lastline(i)){
-                blockStart = blockStart >= 0 ? blockStart : i;
-                const blockEnd = Math.min(i,lastNotEmpty);
+                const blockEnd = lastNotEmpty;
 
-                if(line.length > 0 && blockStart >= 0){
+                if(blockStart >= 0){
                     ret.push({
                         r: new Range(
-                            selection.start.line+blockStart,indent
-                            ,selection.start.line+blockEnd,indent+lines[blockEnd].length
+                            selection.start.line+blockStart, indent
+                            ,selection.start.line+blockEnd, indent+lines[blockEnd].length
                         )
-                        , l: lines.slice(blockStart,blockEnd+1)
+                        , l: lines.slice(blockStart, blockEnd+1)
                     })
                 }
             }
         }
 
-        return ret
+        let tret = ret
             .map(x => {
                 x.l = x.l.filter(x => x.length > 0);
                 return x;
             })
             .filter(x => x.l.length > 0);
+        return tret;
     } 
 
-    private static checkLineAboveOrBelow(line:number, document:TextDocument): Range | null{
+    private _numLeadingWhitespace(s:string):number {
+        return numLeadingWhitespace(s, this.tabWidth);
+    }
+
+    private static checkLineAboveOrBelow(line:number, document:TextDocument, takeBoth:boolean=false): Range | null{
         let text = document.lineAt(line).text;
         
         if(text.trim() === ''){
@@ -360,6 +384,9 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
             }
             else if(tabove.trim() === '' && tbelow.trim() !== ''){
                 return new Range(line+1, 0, line+1, tbelow.length);
+            }
+            else if(takeBoth && tabove.trim() !== '' && tbelow.trim() !== ''){
+                return new Range(line-1, 0, line+1, tbelow.length);
             }
             return null;
         }
