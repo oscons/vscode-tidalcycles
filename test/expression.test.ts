@@ -41,8 +41,11 @@ suite("Editor", () => {
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
             assert.isNotNull(expression);
-            if (expression !== null) {
-                expect(expression.expression).to.be.equal("Hello world");
+            if(expression !=  null){
+                assert.isTrue(expression.length > 0);
+                if (expression !== null) {
+                    expect(expression[0].expression).to.be.equal("Hello world");
+                }
             }
         });
 
@@ -52,8 +55,11 @@ suite("Editor", () => {
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
             assert.isNotNull(expression);
-            if (expression !== null) {
-                expect(expression.expression).to.be.equal("Hello world");
+            if(expression !=  null){
+                assert.isTrue(expression.length > 0);
+                if (expression !== null) {
+                    expect(expression[0].expression).to.be.equal("Hello world");
+                }
             }
         });
 
@@ -62,7 +68,7 @@ suite("Editor", () => {
             
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
-            assert.isNull(expression);
+            expect(expression).to.be.oneOf([null, []]);
         });
 
         test("Multi-line expression retrieved", () => {
@@ -71,8 +77,11 @@ suite("Editor", () => {
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
             assert.isNotNull(expression);
-            if (expression !== null) {
-                expect(expression.expression).to.be.equal("one\r\ntwo");
+            if(expression !=  null){
+                assert.isTrue(expression.length > 0);
+                if (expression !== null) {
+                    expect(expression[0].expression).to.be.equal("one\r\ntwo");
+                }
             }
         });
 
@@ -82,8 +91,11 @@ suite("Editor", () => {
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
             assert.isNotNull(expression);
-            if (expression !== null) {
-                expect(expression.expression).to.be.equal("one\r\ntwo");
+            if(expression !=  null){
+                assert.isTrue(expression.length > 0);
+                if (expression !== null) {
+                    expect(expression[0].expression).to.be.equal("one\r\ntwo");
+                }
             }
         });
 
@@ -93,8 +105,11 @@ suite("Editor", () => {
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
             assert.isNotNull(expression);
-            if (expression !== null) {
-                expect(expression.expression).to.be.equal("one\r\ntwo");
+            if(expression !=  null){
+                assert.isTrue(expression.length > 0);
+                if (expression !== null) {
+                    expect(expression[0].expression).to.be.equal("one\r\ntwo");
+                }
             }
         });
 
@@ -102,8 +117,7 @@ suite("Editor", () => {
             const ctx = generateContext(["", "one", "two", "? ", "three"], 0, "default");
             
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
-
-            assert.isNull(expression);
+            expect(expression).to.be.oneOf([null, []]);
         });
     });
 

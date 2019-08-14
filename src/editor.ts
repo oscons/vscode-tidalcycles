@@ -16,7 +16,7 @@ export class TidalExpression {
 }
 
 export interface ISelectionStrategy {
-    getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression | null;
+    getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null;
 }
 
 export interface Type<T> extends Function {
@@ -44,7 +44,7 @@ export class TidalEditor {
         return new strategy();
     }
 
-    public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression | null {
+    public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression[] | null {
         const strategy = this.getStrategy(this.config.evalStrategy());
 
         return strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
@@ -106,7 +106,7 @@ export class DefaultSelectionStrategy implements ISelectionStrategy {
         return currentLineNumber - 1;
     }
 
-    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression | null {
+    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null {
         const getMultiline = (selectionType === ReplSelectionType.MULTI);
         const position = selection.active;
 
@@ -117,7 +117,7 @@ export class DefaultSelectionStrategy implements ISelectionStrategy {
         if (!getMultiline) {
             if (this.isEmpty(document, position.line)) { return null; }
             let range = new Range(line.lineNumber, 0, line.lineNumber, line.text.length);
-            return new TidalExpression(line.text, range);
+            return [new TidalExpression(line.text, range)];
         }
 
         // If there is a multi-line expression
@@ -132,6 +132,6 @@ export class DefaultSelectionStrategy implements ISelectionStrategy {
 
         let range = new Range(startLineNumber, 0, endLineNumber, endCol);
 
-        return new TidalExpression(document.getText(range), range);
+        return [new TidalExpression(document.getText(range), range)];
     }    
 }
