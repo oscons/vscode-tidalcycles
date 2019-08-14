@@ -83,5 +83,4 @@ suite('Repl', () => {
         ctx.mockTidal.verify(t => t.sendTidalExpression('bar'), TypeMoq.Times.once());
         ctx.mockHistory.verify(h => h.log(TypeMoq.It.isAny()), TypeMoq.Times.once());
     });
-    test('')
 });
