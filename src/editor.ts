@@ -2,24 +2,29 @@ import {Range, TextEditor, TextDocument, Selection} from 'vscode';
 import { ReplSelectionType } from './repl';
 import { Config } from './config';
 
+export enum TidalExpressionStatus {
+    VALID
+    , INVALID
+}
+
 /**
  * Represents a single expression to be executed by Tidal.
  */
 export class TidalExpression {
-    public readonly expression: string;
-    public readonly range: Range;
-
-    constructor(expression: string, range: Range) {
-        this.expression = expression;
-        this.range = range;
+    
+    constructor(
+        public readonly expression: string
+        , public readonly range: Range
+        , public readonly status: TidalExpressionStatus = TidalExpressionStatus.VALID
+    ) {
     }
 }
 
-export interface ISelectionStrategy {
+interface ISelectionStrategy {
     getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null;
 }
 
-export interface Type<T> extends Function {
+interface Type<T> extends Function {
     new (...args: any[]): T;
 }
 
@@ -34,6 +39,7 @@ export class TidalEditor {
         , private config: Config
     ) {
         this.availableStrategies.set("default", DefaultSelectionStrategy);
+        this.availableStrategies.set("fuzzy", FuzzySelectionStrategy);
     }
 
     private getStrategy(name: string): ISelectionStrategy {
@@ -51,7 +57,7 @@ export class TidalEditor {
     }    
 }
 
-export class DefaultSelectionStrategy implements ISelectionStrategy {
+class DefaultSelectionStrategy implements ISelectionStrategy {
     private isEmpty(document: TextDocument, line: number): boolean {
         return document.lineAt(line).text.trim().length === 0;
     }
@@ -134,4 +140,230 @@ export class DefaultSelectionStrategy implements ISelectionStrategy {
 
         return [new TidalExpression(document.getText(range), range)];
     }    
+}
+
+export function numLeadingWhitespace(s:string, tabWidth:number=4){
+    return s.replace(/\S.*$/,'').split('')
+            .map(z => z === "\t" ? tabWidth : (z === ' ' ? 1 : 0))
+            .reduce((y,z) => y+z, 0);
+}
+
+class FuzzySelectionStrategy implements ISelectionStrategy{
+
+    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null {
+        const nothingSelected = (selection.start.line == selection.end.line && selection.start.character == selection.end.character);
+
+        let range = new Range(selection.start.line, selection.start.character, selection.end.line, selection.end.character);
+
+        if(nothingSelected){
+            let newRange = FuzzySelectionStrategy.checkLineAboveOrBelow(selection.end.line, document);
+            if(newRange === null){
+                return [];
+            }
+            range = newRange;
+        }
+
+        // First some logic to get the "real" selection
+        if(selectionType === ReplSelectionType.SINGLE){
+            if(nothingSelected){
+                 range = new Range(range.start.line, range.start.character, range.end.line, document.lineAt(range.end.line).text.length);
+            }
+            else {
+                // nothing to do here, the user specifically selecte what she wanted
+            }
+        }
+        else {
+            let startIndent = numLeadingWhitespace(document.lineAt(range.start.line).text);
+            let startLine = range.start.line;
+            for(let sl = startLine-1;sl>=0;sl--){
+                const line = document.lineAt(sl).text;
+                if(startIndent == 0){
+                    // TODO: Decide if comment-only lines should cause a break as well. Maybe worth a config item
+                    if(
+                        line.trim() === ''
+                        || numLeadingWhitespace(line) > startIndent
+                        || (!nothingSelected && numLeadingWhitespace(line) <= startIndent)
+                        ){
+                        startLine = sl+1;
+                        break;
+                    }
+                }
+                else {
+                    const lineWs = numLeadingWhitespace(line);
+                    if(lineWs == 0 || (!nothingSelected && numLeadingWhitespace(line) <= startIndent)){
+                        startLine = sl;
+                        break;
+                    }
+                }
+                if(sl == 0){
+                    startLine = sl;
+                }
+            }
+
+            startIndent = numLeadingWhitespace(document.lineAt(nothingSelected ? startLine : range.end.line).text);
+            let selectionEndIndent = numLeadingWhitespace(document.lineAt(range.end.line).text);
+            let endLine = range.end.line;
+            for(let sl = endLine+1;sl<document.lineCount;sl++){
+                const line = document.lineAt(sl).text;
+
+                if(line.trim() === ''){
+                    if(selectionEndIndent === 0){
+                        endLine = sl-1;
+                        break;
+                    }
+                    continue;
+                }
+
+                const lineWs = numLeadingWhitespace(line);
+                if(
+                    lineWs < startIndent
+                    || (nothingSelected && selectionEndIndent > 0 && lineWs == 0)
+                    || (!nothingSelected && lineWs <= selectionEndIndent)
+                ){
+                    endLine = sl-1;
+                    break;
+                }
+
+                if(sl === document.lineCount-1){
+                    endLine = sl;
+                }
+            }
+            
+            range = new Range(startLine, 0, endLine, document.lineAt(endLine).text.length);
+        }
+
+        return FuzzySelectionStrategy.splitIntoTidalChunks(document, range)
+            .map(c => {
+                return new TidalExpression(c.l.join("\r\n"), c.r);
+            })
+            .filter(x => typeof x !== 'undefined' && x.expression.trim() !== '');
+    }
+
+    private static splitIntoTidalChunks(document: TextDocument, selection:Range): ({r:Range,l:string[]})[] {
+        const ret: ({r:Range,l:string[]})[] = [];
+
+        /*
+        Note:   document.getText returns a "valid" selection which sometimes is
+                the whole line and also sometimes includes the line break to the
+                next line. Hence we'r going line by line here and take care of
+                start and end character ourselves.
+
+                https://code.visualstudio.com/api/references/vscode-api#TextDocument.getText
+        */
+        const lines: string[] =  Array(1+selection.end.line-selection.start.line).fill("").map((_,i)=>document.lineAt(selection.start.line+i).text);
+        // The order of the statements is important here!
+        lines[lines.length-1] = lines[lines.length-1].substr(0,selection.end.character);
+        lines[0] = lines[0].substr(selection.start.character);
+        
+        let lineOneIndented = false;
+        let indent = -1;
+        for(let i=0;i<lines.length;i++){
+            if(indent == 0){
+                break;
+            }
+            // remove comments and blanks at end of line
+            lines[i] = lines[i].replace(/\s*--.*$/, '').replace(/\s+$/,'');
+            if(lines[i].length === 0){
+                continue;
+            }
+
+            const lindent = numLeadingWhitespace(lines[i]);
+            if(i == 0){
+                lineOneIndented = lindent > 0;
+            }
+            
+            if(indent === -1){
+                if(selection.start.character > 0){
+                    let realFirstLine = document.lineAt(selection.start.character).text;
+                    indent = numLeadingWhitespace(realFirstLine);
+                }
+                else {
+                    indent = lindent;
+                }
+                
+            }
+            else {
+                indent = Math.min(lindent, indent);
+            }
+        }
+
+        for(let i=0;i<lines.length;i++){
+            if(i == 0 && !lineOneIndented){
+                continue
+            }
+            lines[i] = lines[i].substr(indent);
+        }
+
+        const lastline = (x:number) => x >= lines.length-1;
+
+        let blockStart = -1;
+        let lastNotEmpty = 0;
+        for(let i=0;i<lines.length;i++){
+            const line = lines[i];
+            const lindent = numLeadingWhitespace(line);
+
+            if(lindent === 0){
+                if(line.length > 0){
+                    if(blockStart >= 0){
+                        const blockEnd = Math.min(i-1,lastNotEmpty);
+                        ret.push({
+                            r: new Range(
+                                selection.start.line+blockStart,indent
+                                ,selection.start.line+blockEnd,indent+lines[blockEnd].length
+                            )
+                            , l: lines.slice(blockStart,i)
+                        })
+                        blockStart = -1;
+                    }
+                    lastNotEmpty = i;
+                    if(!lastline(i)){
+                        blockStart = i;
+                        continue;
+                    }
+                }
+            }
+        
+            // last line
+            if(lastline(i)){
+                blockStart = blockStart >= 0 ? blockStart : i;
+                const blockEnd = Math.min(i,lastNotEmpty);
+
+                if(line.length > 0 && blockStart >= 0){
+                    ret.push({
+                        r: new Range(
+                            selection.start.line+blockStart,indent
+                            ,selection.start.line+blockEnd,indent+lines[blockEnd].length
+                        )
+                        , l: lines.slice(blockStart,blockEnd+1)
+                    })
+                }
+            }
+        }
+
+        return ret
+            .map(x => {
+                x.l = x.l.filter(x => x.length > 0);
+                return x;
+            })
+            .filter(x => x.l.length > 0);
+    } 
+
+    private static checkLineAboveOrBelow(line:number, document:TextDocument): Range | null{
+        let text = document.lineAt(line).text;
+        
+        if(text.trim() === ''){
+            let tabove = line == 0 ? "" : document.lineAt(line-1).text;
+            let tbelow = line < (document.lineCount-1) ? document.lineAt(line+1).text : "";
+
+            if(tabove.trim() !== '' && tbelow.trim() === ''){
+                return new Range(line-1, 0, line-1, tabove.length);
+            }
+            else if(tabove.trim() === '' && tbelow.trim() !== ''){
+                return new Range(line+1, 0, line+1, tbelow.length);
+            }
+            return null;
+        }
+        return new Range(line, 0, line, 0);
+    }
+
 }

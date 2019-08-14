@@ -107,9 +107,11 @@
                     , "markdownDescription": "Select an evaluation strategy that governs what happens when you 'evaluate' a single or multipe lines in the editor."
                     , "enum": [
                         "default"
+                        , "fuzzy"
                     ]
                     , "enumDescriptions": [
                         "The default evaluation strategy of the TidalCycles VS Code extension"
+                        , "A more fuzzy evaluation strategy that will try to (at times badly) guess what shoudl be executed. This includes executing adjacent top-level lines as separate statements."
                     ]
                 }
             }
