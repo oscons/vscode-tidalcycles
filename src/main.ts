@@ -1,5 +1,5 @@
 import { TextEditor, ExtensionContext, window, commands } from 'vscode';
-import { Repl } from './repl';
+import { Repl, ReplSelectionType } from './repl';
 import { Logger } from './logging';
 import { Config } from './config';
 import { Ghci } from './ghci';
@@ -39,14 +39,14 @@ export function activate(context: ExtensionContext) {
     const evalSingleCommand = commands.registerCommand('tidal.eval', function () {
         const repl = getRepl(repls, window.activeTextEditor);
         if (repl !== undefined) {
-            repl.evaluate(false);
+            repl.evaluate(ReplSelectionType.SINGLE);
         }
     });
 
     const evalMultiCommand = commands.registerCommand('tidal.evalMulti', function () {
         const repl = getRepl(repls, window.activeTextEditor);
         if (repl !== undefined) {
-            repl.evaluate(true);
+            repl.evaluate(ReplSelectionType.MULTI);
         }
     });
 

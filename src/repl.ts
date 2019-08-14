@@ -5,12 +5,17 @@ import { IHistory } from './history';
 import { DecorationRenderOptions, TextEditorDecorationType } from 'vscode';
 import { Config } from './config';
 
+export enum ReplSelectionType {
+    SINGLE
+    , MULTI
+}
+
 /**
  * Provides the UI commands for an interactive Tidal session.
  */
 export interface IRepl {
     hush(): Promise<void>;
-    evaluate(isMultiline: boolean): Promise<void>;
+    evaluate(selectionType: ReplSelectionType): Promise<void>;
 }
 
 export class Repl implements IRepl {
@@ -35,12 +40,12 @@ export class Repl implements IRepl {
         this.history.log(new TidalExpression('hush', new vscode.Range(0, 0, 0, 0)));
     }
 
-    public async evaluate(isMultiline: boolean) {
+    public async evaluate(selectionType: ReplSelectionType) {
         if (!this.editingTidalFile()) { 
             return; 
         }
 
-        const block = new TidalEditor(this.textEditor).getTidalExpressionUnderCursor(isMultiline);
+        const block = new TidalEditor(this.textEditor).getTidalExpressionUnderCursor(selectionType);
         
         if (block) {
             await this.tidal.sendTidalExpression(block.expression);

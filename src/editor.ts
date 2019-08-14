@@ -1,4 +1,5 @@
 import {Range, TextEditor, TextDocument, Selection} from 'vscode';
+import { ReplSelectionType } from './repl';
 
 /**
  * Represents a single expression to be executed by Tidal.
@@ -14,7 +15,7 @@ export class TidalExpression {
 }
 
 export interface ISelectionStrategy {
-    getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, getMultiline: boolean): TidalExpression | null;
+    getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression | null;
 }
 
 /**
@@ -29,8 +30,8 @@ export class TidalEditor {
     ) {
     }
 
-    public getTidalExpressionUnderCursor(getMultiline: boolean): TidalExpression | null {
-        return this.strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, getMultiline);
+    public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression | null {
+        return this.strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
     }    
 }
 
@@ -89,7 +90,8 @@ export class DefaultSelectionStrategy implements ISelectionStrategy {
         return currentLineNumber - 1;
     }
 
-    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, getMultiline: boolean): TidalExpression | null {
+    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression | null {
+        const getMultiline = (selectionType === ReplSelectionType.MULTI);
         const position = selection.active;
 
         const line = document.lineAt(position);
