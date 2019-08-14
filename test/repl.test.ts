@@ -19,8 +19,8 @@ function genContext(
     fileName:string='myfile.tidal'
     , document:string[]=['Foo','bar','','baz']
     , pos1:number[]=[1,0]
-    , pos2:number[]=[1,2])
-:TestContext {
+    , pos2:number[]=[1,2]
+):TestContext {
     let mockDocument = createMockDocument(document)
     mockDocument.setup(d => d.fileName).returns(() => fileName);
     return {
