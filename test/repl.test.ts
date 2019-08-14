@@ -1,7 +1,7 @@
 import { Position, Selection, TextEditorDecorationType, DecorationRenderOptions, TextEditor, TextDocument } from 'vscode';
 import * as TypeMoq from 'typemoq';
 import { createMockDocument, createMockEditor, createMockCreateTextEditorDecorationType } from './mock';
-import { Repl } from '../src/repl';
+import { Repl, ReplSelectionType } from '../src/repl';
 import { ITidal } from '../src/tidal';
 import { IHistory } from '../src/history';
 import { Config } from '../src/config';
@@ -60,7 +60,7 @@ suite('Repl', () => {
     test('Expression not evaluated in non-.tidal file', async () => {
         let ctx = genContext('myfile.ideal');
         let repl = getRepl(ctx);
-        await repl.evaluate(false);
+        await repl.evaluate(ReplSelectionType.SINGLE);
 
         ctx.mockTidal.verify(t => t.sendTidalExpression(TypeMoq.It.isAnyString()), TypeMoq.Times.never());
         ctx.mockHistory.verify(h => h.log(TypeMoq.It.isAny()), TypeMoq.Times.never());
@@ -69,7 +69,7 @@ suite('Repl', () => {
     test('Multi-line expression evaluated in .tidal file', async () => {
         let ctx = genContext();
         let repl = getRepl(ctx);
-        await repl.evaluate(true);
+        await repl.evaluate(ReplSelectionType.MULTI);
 
         ctx.mockTidal.verify(t => t.sendTidalExpression('Foo\r\nbar'), TypeMoq.Times.once());
         ctx.mockHistory.verify(h => h.log(TypeMoq.It.isAny()), TypeMoq.Times.once());
@@ -78,7 +78,7 @@ suite('Repl', () => {
     test('Single-line expression evaluated in .tidal file', async () => {
         let ctx = genContext();
         let repl = getRepl(ctx);
-        await repl.evaluate(false);
+        await repl.evaluate(ReplSelectionType.SINGLE);
 
         ctx.mockTidal.verify(t => t.sendTidalExpression('bar'), TypeMoq.Times.once());
         ctx.mockHistory.verify(h => h.log(TypeMoq.It.isAny()), TypeMoq.Times.once());
