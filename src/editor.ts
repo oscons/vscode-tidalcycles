@@ -1,4 +1,4 @@
-import {Range, TextEditor, TextDocument, } from 'vscode';
+import {Range, TextEditor, TextDocument, Selection} from 'vscode';
 
 /**
  * Represents a single expression to be executed by Tidal.
@@ -13,17 +13,28 @@ export class TidalExpression {
     }
 }
 
+export interface ISelectionStrategy {
+    getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, getMultiline: boolean): TidalExpression | null;
+}
+
 /**
  * Represents a document of Tidal commands.
  */
 export class TidalEditor {
 
-    private editor: TextEditor;
+    private strategy: ISelectionStrategy = new DefaultSelectionStrategy();
 
-    constructor(editor: TextEditor) {
-        this.editor = editor;
+    constructor(
+        private editor: TextEditor
+    ) {
     }
 
+    public getTidalExpressionUnderCursor(getMultiline: boolean): TidalExpression | null {
+        return this.strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, getMultiline);
+    }    
+}
+
+export class DefaultSelectionStrategy implements ISelectionStrategy {
     private isEmpty(document: TextDocument, line: number): boolean {
         return document.lineAt(line).text.trim().length === 0;
     }
@@ -78,9 +89,8 @@ export class TidalEditor {
         return currentLineNumber - 1;
     }
 
-    public getTidalExpressionUnderCursor(getMultiline: boolean): TidalExpression | null {
-        const document = this.editor.document;
-        const position = this.editor.selection.active;
+    public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, getMultiline: boolean): TidalExpression | null {
+        const position = selection.active;
 
         const line = document.lineAt(position);
 
@@ -93,7 +103,7 @@ export class TidalEditor {
         }
 
         // If there is a multi-line expression
-        const selectedRange = new Range(this.editor.selection.anchor, this.editor.selection.active);
+        const selectedRange = new Range(selection.anchor, selection.active);
         const startLineNumber = this.getStartLineNumber(document, selectedRange);
         if (startLineNumber === null) {
             return null;
