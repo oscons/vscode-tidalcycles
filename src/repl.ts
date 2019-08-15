@@ -47,12 +47,11 @@ export class Repl implements IRepl {
 
         const block = new TidalEditor(this.textEditor, this.config).getTidalExpressionUnderCursor(selectionType);
         
-        if (block && block.length > 0) {
-            for(let i=0;i<block.length;i++){
-                await this.tidal.sendTidalExpression(block[i].expression);
-                this.feedback(block[i].range);
-                this.history.log(block[i]);
-            }
+        for(let i=0;i<block.length;i++){
+            // TODO: Negative feedback for failed expressions, e.g. stderr output
+            await this.tidal.sendTidalExpression(block[i].expression);
+            this.feedback(block[i].range);
+            this.history.log(block[i]);
         }
     }
 

@@ -1,6 +1,7 @@
 import {Range, TextEditor, TextDocument, Selection} from 'vscode';
 import { ReplSelectionType } from './repl';
 import { Config } from './config';
+import { isDate } from 'util';
 
 export enum TidalExpressionStatus {
     VALID
@@ -50,10 +51,13 @@ export class TidalEditor {
         return new strategy(this.config);
     }
 
-    public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression[] | null {
+    public getTidalExpressionUnderCursor(selectionType: ReplSelectionType): TidalExpression[] {
         const strategy = this.getStrategy(this.config.evalStrategy());
-
-        return strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
+        const expressions  = strategy.getTidalExpressionUnderCursor(this.editor.document, this.editor.selection, selectionType);
+        if(expressions === null){
+            return []
+        }
+        return expressions;
     }    
 }
 
