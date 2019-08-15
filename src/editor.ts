@@ -1,7 +1,6 @@
 import {Range, TextEditor, TextDocument, Selection} from 'vscode';
 import { ReplSelectionType } from './repl';
 import { Config } from './config';
-import { isDate } from 'util';
 
 export enum TidalExpressionStatus {
     VALID
