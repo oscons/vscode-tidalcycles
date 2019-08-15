@@ -15,11 +15,13 @@ suite("Editor", () => {
         mockConfig: TypeMoq.IMock<Config>
         , mockDocument: TypeMoq.IMock<TextDocument>
         , mockEditor: TypeMoq.IMock<TextEditor>
+        , originalDoc: string[] 
     });
 
-    function generateContext(doc:string | string[], pos:(number | number[] | string | string[]), strategy:string): TestContext {
+    function generateContext(doc:string[], pos:(number | number[] | string | string[]), strategy:string): TestContext {
+        const adoc = doc.map(x=>x);
         const selectionContext = getSelectionContext(doc, pos);
-
+    
         const mockConfig = TypeMoq.Mock.ofType<Config>();
         mockConfig.setup(x => x.evalStrategy()).returns(x => strategy);
 
@@ -27,6 +29,7 @@ suite("Editor", () => {
             mockConfig
             , mockDocument: selectionContext.mockDocument
             , mockEditor: selectionContext.mockEditor
+            , originalDoc: adoc
         };
     }
 
@@ -37,7 +40,7 @@ suite("Editor", () => {
 
     suite("Strategy: default", () => {
         test("Single-line expression retrieved", () => {
-            const ctx = generateContext("?Hello world", 0, "default");
+            const ctx = generateContext(["?Hello world"], 1, "default");
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
             assert.isNotNull(expression);
@@ -50,7 +53,7 @@ suite("Editor", () => {
         });
 
         test("Single-line expression between blank lines retrieved", () => {
-            const ctx = generateContext(["", "?Hello world", ""], 0, "default");
+            const ctx = generateContext(["", "?Hello world", ""], 1, "default");
 
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
@@ -64,15 +67,16 @@ suite("Editor", () => {
         });
 
         test("Blank line becomes null expression", () => {
-            const ctx = generateContext(["?", "Hello world", ""], 0, "default");
+            const ctx = generateContext(["?", "Hello world", ""], 1, "default");
             
             let expression = getExpression(ctx, ReplSelectionType.SINGLE);
 
-            expect(expression).to.be.oneOf([null, []]);
+            expect(expression).not.to.be.eq(null);
+            expect(expression.length).to.be.eq(0);
         });
 
         test("Multi-line expression retrieved", () => {
-            const ctx = generateContext(["", "?one", "two", " ", "three"], 0, "default");
+            const ctx = generateContext(["", "?one", "two", " ", "three"], 1, "default");
         
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
@@ -86,7 +90,7 @@ suite("Editor", () => {
         });
 
         test("Multi-line expression from split selection", () => {
-            const ctx = generateContext(["", "?one", "two", " ", "three?"], [0, 1], "default");
+            const ctx = generateContext(["", "?one", "two", " ", "three?"], [1, 2], "default");
             
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
@@ -100,7 +104,7 @@ suite("Editor", () => {
         });
 
         test("Multi-line expression retrieved before selection", () => {
-            const ctx = generateContext(["", "?one", "two", " ", "th?ree"], [0, 1], "default");
+            const ctx = generateContext(["", "?one", "two", " ", "th?ree"], [1, 2], "default");
             
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
 
@@ -114,15 +118,17 @@ suite("Editor", () => {
         });
 
         test("Multi-line expression becomes null from blank line", () => {
-            const ctx = generateContext(["", "one", "two", "? ", "three"], 0, "default");
+            const ctx = generateContext(["", "one", "two", "? ", "three"], 1, "default");
             
             let expression = getExpression(ctx, ReplSelectionType.MULTI);
-            expect(expression).to.be.oneOf([null, []]);
+            expect(expression).not.to.be.eq(null);
+            expect(expression.length).to.be.eq(0);
         });
     });
 
     type TestInfo = ({
-        sel: (number | string | number[] | string[])
+        doc: (string | string[])[]
+        , sel: (number | string | number[] | string[])
         , res: Map<ReplSelectionType, undefined | string | string[]>
         , l: string
     });
@@ -161,76 +167,131 @@ suite("Editor", () => {
                     expect(numLeadingWhitespace(" \t \t"+x)).to.be.eq(10);
                 });
             });
+            // TODO add test for normalization
         });
-        const testDoc = `
-?_a?on?_b?e--no comment1
-t?_c?wo
-  ?_bl1?  ?_bl2?
-   ?_bl3?
-   ?_bl4? ?_bl5? 
-three
+        
+//         const atestDoc = `
+// ?_a?on?_b?e--no comment1
+// t?_c?wo
+//   ?_bl1?  ?_bl2?
+//    ?_bl3?
+//    ?_bl4? ?_bl5? 
+// three
 
-do
-...
-    f?_d?ou?_e?r
-............
-        fi?_f?ve --no comment2
-?_bl6?
-:sixer
-do
-    seven
-        `.replace(/[.]/g,' ').replace(/:/g,"\t");
+// do
+// ...
+//     f?_d?ou?_e?r
+// ............
+//         fi?_f?ve --no comment2
+// ?_bl6?
+// :sixer
+// seven
+// ?_bl8?
+// eight
+//         `;
         const tests: TestInfo[] = [
-                {l:"No selection, one line, blank, far between blocks", sel: "bl3"
+                {l:"No selection, one line, blank, far between blocks", sel: 1
+                    , doc:  [["?","","one"],["one","","?","","two"],["one","","?"],["?","","....one"]
+                            , ["one","","?","","....two"],["....one","","?"]]
                     , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
-                , {l:"No selection, one line, blank, close between blocks", sel: "bl6"
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    sixer"])}
-                , {l:"No selection, one line, blank, above block", sel: "bl4"
-                    , res: bm(ReplSelectionType.SINGLE, "three", ReplSelectionType.MULTI, "three")}
-                , {l:"No selection, one line, blank, below block", sel: "bl1"
-                    , res: bm(ReplSelectionType.SINGLE, "two", ReplSelectionType.MULTI, ["one", "two"])}
-                , {l:"With selection, one line, blank", sel: ["bl1","bl2"]
+                , {l:"No selection, one line, blank, close between, top level", sel: 1
+                    , doc: [["two","?","three"],["two","?","three","","four"]
+                            , ["","two","?","three"],["one","","two","?","three","","four"]]
+                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two","three"])}
+                , {l:"No selection, one line, blank, close between, indented blocks", sel: 1
+                    , doc: [["one","?","....two"],["....one","?","........two"]]
+                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["one\r\n....two"])}
+                , {l:"No selection, one line, blank, above block", sel: 1
+                    , doc: [["?","one","","two"],["start","","?","one","","two"],["?","one","","two","","end"]]
+                    , res: bm(ReplSelectionType.SINGLE, "one", ReplSelectionType.MULTI, "one")}
+                , {l:"No selection, one line, blank, above block, top level", sel: 1
+                    , doc:  [["?","one","two"],["start","","?","one","two"],["?","one","two","","end"]
+                            , ["?","....one","....two"],["?","....one","....two","","end"]]
+                    , res: bm(ReplSelectionType.SINGLE, "one", ReplSelectionType.MULTI, ["one","two"])}
+                , {l:"No selection, one line, blank, below block", sel: 1
+                    , doc: [["two","three","?"],["one","","two","three","?"],["one","","two","three","?","","four"]
+                            , ["....two","....three","?"], ["....two","....three","?","","four"]]
+                    , res: bm(ReplSelectionType.SINGLE, "three", ReplSelectionType.MULTI, ["two", "three"])}
+                , {l:"No selection, one line, not blank", sel: 1
+                    , doc: [["?two","three"],["tw?o","three"],["two?","three"]
+                            , ["one","","?two","three"],["one","","tw?o","three"],["one","","two?","three"]
+                            , ["one","","?two","three","","four"],["one","","tw?o","three","","four"],["one","","two?","three","","four"]
+                            , ["....?two","....three"],["....tw?o","....three"],["....two?","....three"]
+                            , ["....?two","....three","four"],["....tw?o","....three","four"],["....two?","....three","four"]
+                    ]
+                    , res: bm(ReplSelectionType.SINGLE, "two", ReplSelectionType.MULTI, ["two", "three"])}
+                , {l:"With selection, one line, blank", sel: [1,2]
+                    , doc: [["one","two","..?..?..","","three"],["","two","?....?..","","three"],["","two","?....?","","three"]]
                     , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two"])}
-                , {l:"With selection, multi line, blank, below block", sel: ["bl1","bl3"]
+                , {l:"With selection, one line, blank", sel: [1,2]
+                    , doc: [["one","two","..?..?..","....three"],["","two","?....?..","....three"],["","two","?....?","....three"]
+                            ,["one","two","..?..?..","....three","four"],["","two","?....?..","....three","four"],["","two","?....?","....three","four"]]
+                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two\r\n....three"])}
+                , {l:"With selection, multi line, blank, below block", sel: [1, 2]
+                    , doc: [["one","two","..?..",".....?..","","three"],["one","two","","..?..",".....?..","three"]
+                        ,["one","two","..?..",".....?..","three"],["one","two","","..?..",".....?..","","three"]]
                     , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
-                , {l:"With selection, multi line, blank, above block", sel: ["bl3","bl5"]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
-                , {l:"No selection, one line", sel: "a"
-                    , res: bm(ReplSelectionType.SINGLE, "one", ReplSelectionType.MULTI, ["one", "two"])}
-                , {l:"With selection, one line", sel: ["a","b"]
-                    , res: bm(ReplSelectionType.SINGLE, "on", ReplSelectionType.MULTI, ["one"])}
-                , {l:"With selection, multi line", sel: ["a","c"]
-                    , res: bm(ReplSelectionType.SINGLE, ["one", "t"], ReplSelectionType.MULTI, ["one","two"])}
-                , {l:"No selection, one line, indented", sel: "d"
-                    , res: bm(ReplSelectionType.SINGLE, "four", ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    sixer"])}
-                , {l:"With selection, one line, indented", sel: ["d","e"]
-                    , res: bm(ReplSelectionType.SINGLE, "ou", ReplSelectionType.MULTI, ["four\r\n    five"])}
-                , {l:"With selection, multi line, indented", sel: ["d","f"]
-                    , res: bm(ReplSelectionType.SINGLE, ["our\r\n    fi"], ReplSelectionType.MULTI, ["four\r\n    five"])}
+                // , {l:"With selection, one line", sel: ["a","b"]
+                //     , res: bm(ReplSelectionType.SINGLE, "on", ReplSelectionType.MULTI, ["one"])}
+                // , {l:"With selection, multi line", sel: ["a","c"]
+                //     , res: bm(ReplSelectionType.SINGLE, ["one", "t"], ReplSelectionType.MULTI, ["one","two"])}
+                // , {l:"No selection, one line, indented", sel: "d"
+                //     , res: bm(ReplSelectionType.SINGLE, "four", ReplSelectionType.MULTI, ["do\r\n    four\r\n        five\r\n    sixer"])}
+                // , {l:"With selection, one line, indented", sel: ["d","e"]
+                //     , res: bm(ReplSelectionType.SINGLE, "ou", ReplSelectionType.MULTI, ["four\r\n    five"])}
+                // , {l:"With selection, multi line, indented", sel: ["d","f"]
+                //     , res: bm(ReplSelectionType.SINGLE, ["our\r\n    fi"], ReplSelectionType.MULTI, ["four\r\n    five"])}
         ];
 
-        [ReplSelectionType.SINGLE,ReplSelectionType.MULTI].map((selectionType) => {
+        [ReplSelectionType.SINGLE, ReplSelectionType.MULTI].map((selectionType) => {
             suite("Selection tpye: "+ReplSelectionType[selectionType], () => {
-                tests.map((t,i) => {
-                    test(t.l+" ("+(i+1)+"/"+tests.length+")", () =>{
-                        const ctx = generateContext(testDoc, t.sel, "fuzzy");
-                        
-                        let expression = getExpression(ctx, selectionType);
-                        const result = t.res.get(selectionType);
-
-                        if(typeof result === 'undefined'){
-                            assert.isTrue(expression === null || expression.length === 0);
+                tests.map((t,testNum) => {
+                    /*
+                    split the test into batches, to avoid mocha warnings of
+                    long run times.
+                    */
+                    t.doc.reduce((x:(({doc:string|string[],docNum:number})[])[], y, i) => {
+                        const e = {doc: y, docNum: i};
+                        if(i % 5 === 0){
+                            x.push([e]);
                         }
                         else {
-                            assert.isNotNull(expression);
-                            if (expression !== null) {
-                                expect(expression.length).to.be.equal(result.length);
-
-                                for(let j=0;j<expression.length;j++){
-                                    expect(expression[j].expression).to.be.equal(result[j]);
-                                }
-                            }
+                            x[x.length-1].push(e);
                         }
+                        return x;
+                    }, []).map((docBatch, batchNum, batches) => {
+                        test(t.l+" (test:"+(testNum+1)+"/"+tests.length+", batch:"+batchNum+"/"+batches.length+")", () =>{
+                            docBatch.map(({doc, docNum}) => {
+                                const errMsg = "Failed on doc "+docNum;
+                                let testDoc = typeof doc === 'string' ? doc.split(/\r?\n/) :  doc;
+                                let normalize = (x:string) => x.replace(/[.]/g,' ').replace(/,/g,"\t");
+
+                                // TODO: comments should probably be fuzzed over the doc
+                                testDoc = testDoc
+                                            .map(normalize)
+                                            .map(x => x.trim().length === 0 ? x : x+" -- comment -- still a comment");
+                                
+                                const result = t.res.get(selectionType);
+                                
+                                const ctx = generateContext(testDoc, t.sel, "fuzzy");
+                                
+                                let expression = getExpression(ctx, selectionType);
+
+                                if(typeof result === 'undefined'){
+                                    assert.isTrue(expression === null || expression.length === 0, errMsg);
+                                }
+                                else {
+                                    assert.isNotNull(expression, errMsg);
+                                    if (expression !== null) {
+                                        expect(expression.length).to.be.equal(result.length, errMsg);
+
+                                        for(let j=0;j<expression.length;j++){
+                                            expect(expression[j].expression).to.be.equal(normalize(result[j]), errMsg);
+                                        }
+                                    }
+                                }
+                            });
+                        });
                     });
                 });
             });

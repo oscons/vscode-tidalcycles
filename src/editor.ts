@@ -159,14 +159,22 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
     ){}
 
     public getTidalExpressionUnderCursor(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): TidalExpression[] | null {
+        return [this.expandSelectionRange(document, selection, selectionType)]
+                .map(r => this.splitIntoTidalChunks(document, r))
+                .reduce((x,y) => x.concat(y),[]) // flatten
+                .map(c => new TidalExpression(c.l.join("\r\n"), c.r))
+                .filter(x => typeof x !== 'undefined' && x.expression.trim() !== '');
+    }
+
+    private expandSelectionRange(document: TextDocument, selection: Selection, selectionType: ReplSelectionType): Range | null {
         const nothingSelected = (selection.start.line == selection.end.line && selection.start.character == selection.end.character);
 
         let range = new Range(selection.start.line, selection.start.character, selection.end.line, selection.end.character);
 
         if(nothingSelected){
-            let newRange = FuzzySelectionStrategy.checkLineAboveOrBelow(selection.end.line, document, selectionType === ReplSelectionType.MULTI);
+            let newRange = this.checkLineAboveOrBelow(selection.end.line, document, selectionType === ReplSelectionType.MULTI);
             if(newRange === null){
-                return [];
+                return null;
             }
             range = newRange;
         }
@@ -248,14 +256,13 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
             range = new Range(startLine, 0, endLine, document.lineAt(endLine).text.length);
         }
 
-        return this.splitIntoTidalChunks(document, range)
-            .map(c => {
-                return new TidalExpression(c.l.join("\r\n"), c.r);
-            })
-            .filter(x => typeof x !== 'undefined' && x.expression.trim() !== '');
+        return range;
     }
 
-    private splitIntoTidalChunks(document: TextDocument, selection:Range): ({r:Range,l:string[]})[] {
+    private splitIntoTidalChunks(document: TextDocument, selection:Range | null): ({r:Range,l:string[]})[] {
+        if(selection === null){
+            return [];
+        }
         const ret: ({r:Range,l:string[]})[] = [];
 
         /*
@@ -275,8 +282,7 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
         let indent = -1;
         for(let i=0;i<lines.length;i++){
             // remove comments and blanks at end of line
-            lines[i] = lines[i].replace(/\t/g, "".padEnd(this.tabWidth, " "));
-            lines[i] = lines[i].replace(/\s*--.*$/, '').replace(/\s+$/,'');
+            lines[i] = this.normalizeLine(lines[i]);
             if(lines[i].length === 0 || indent == 0){
                 continue;
             }
@@ -375,20 +381,30 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
         return numLeadingWhitespace(s, this.tabWidth);
     }
 
-    private static checkLineAboveOrBelow(line:number, document:TextDocument, takeBoth:boolean=false): Range | null{
-        let text = document.lineAt(line).text;
-        
-        if(text.trim() === ''){
-            let tabove = line == 0 ? "" : document.lineAt(line-1).text;
-            let tbelow = line < (document.lineCount-1) ? document.lineAt(line+1).text : "";
+    private normalizeLine(s:string):string {
+        let p = Math.max(0,s.indexOf("--"));
+        if(p >= 0){
+            s = s.substr(0, p);
+        }
+        return s
+            .replace(/\t/g,"".padEnd(this.tabWidth," "))
+            .replace(/\s+$/,'');
+    }
 
-            if(tabove.trim() !== '' && tbelow.trim() === ''){
+    private checkLineAboveOrBelow(line:number, document:TextDocument, takeBoth:boolean=false): Range | null{
+        let text = this.normalizeLine(document.lineAt(line).text);
+        
+        if(text === ''){
+            let tabove = this.normalizeLine(line == 0 ? "" : document.lineAt(line-1).text);
+            let tbelow = this.normalizeLine(line < (document.lineCount-1) ? document.lineAt(line+1).text : "");
+
+            if(tabove !== '' && tbelow === ''){
                 return new Range(line-1, 0, line-1, tabove.length);
             }
-            else if(tabove.trim() === '' && tbelow.trim() !== ''){
+            else if(tabove === '' && tbelow !== ''){
                 return new Range(line+1, 0, line+1, tbelow.length);
             }
-            else if(takeBoth && tabove.trim() !== '' && tbelow.trim() !== ''){
+            else if(takeBoth && tabove !== '' && tbelow !== ''){
                 return new Range(line-1, 0, line+1, tbelow.length);
             }
             return null;

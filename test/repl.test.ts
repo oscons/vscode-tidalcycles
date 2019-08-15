@@ -18,7 +18,7 @@ type TestContext = ({
 function genContext(
     fileName:string='myfile.tidal'
     , document:string[]=['Foo','?bar','','baz']
-    , pos:number | number[]=0
+    , pos:number | number[]=1
 ):TestContext {
     const selectionContext = getSelectionContext(document, pos);
 

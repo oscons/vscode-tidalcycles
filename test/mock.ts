@@ -89,7 +89,7 @@ export function genDocInfo(s:string | string[]): TestDocInfo {
     else {
         ret.doc = s;
     }
-    let cnt = 0;
+    let cnt = 1;
     const ndoc: string[] = [];
     for(let i=0;i<ret.doc.length;i++){
         let l = ret.doc[i];
@@ -146,34 +146,58 @@ export function getSelectionContext(
         docInfo = doc;
     }
 
-    let pos: (number[]|undefined)[] = [];
+    let pos: ({p:string, m:number[] | undefined})[] = [];
+    let docrep = () => {
+        let _d:string;
+        if(typeof doc === "string"){
+            _d = doc;
+        }
+        else if(Array.isArray(doc)){
+            _d = doc.join("\r\n");
+        }
+        else{
+            _d = doc.doc.join("\r\n");
+        }
+        return _d;
+    }
 
     if(typeof selectionPositions === 'string'){
-        pos = [docInfo.marks.get(selectionPositions)];
+        pos = [{p:selectionPositions, m:docInfo.marks.get(selectionPositions)}];
     }
     else if(typeof selectionPositions === 'number'){
-        pos = [docInfo.marks.get(""+selectionPositions)];
+        pos = [{p:""+selectionPositions, m:docInfo.marks.get(""+selectionPositions)}];
     }
     else if(Array.isArray(selectionPositions)){
         const sa: any[] = selectionPositions;
         pos = sa.map(x => {
+            let m;
             if(typeof x === "string"){
-                return docInfo.marks.get(x);
+                m = docInfo.marks.get(x);
             }
-            return docInfo.marks.get(""+x);
-        });
+            else {
+                m = docInfo.marks.get(""+x)
+            }
+            return {p:x, m};
+        })
     }
     
+    pos = pos.map(x => {
+        if(typeof x.m === 'undefined'){
+            throw new Error(`There is nor mark "${x.p}" in document "${docrep()}"`);
+        }
+        return x;
+        });
+
     let xordef = (x:undefined | number[], d: number[]): number[] => typeof x === 'undefined' ? d : x;
 
     let pos1: number[] = [0,0];
     let pos2: number[] = pos1;
     if(pos.length > 0){
-        pos1 = xordef(pos[0], pos1);
+        pos1 = xordef(pos[0].m, pos1);
     }
     pos2 = pos1;
     if(pos.length > 1){
-        pos2 = xordef(pos[1], pos2);
+        pos2 = xordef(pos[1].m, pos2);
     }
     
     return generateEditorContext(docInfo.doc, pos1, pos2);
@@ -202,7 +226,7 @@ do
             assert.equal(myTestDoc.doc[8], "");
             assert.equal(myTestDoc.doc[11], "    let w = 2");
 
-            const pos = {"a": [1, 6], "1": [8, 0], "2": [11, 13]};
+            const pos = {"a": [1, 6], "2": [8, 0], 3: [11, 13]};
             Object.entries(pos).forEach(([k, v]) => {
                 const m = myTestDoc.marks.get(k);
                 assert.exists(m);
@@ -211,7 +235,7 @@ do
                 }
             });
 
-            const selCtx = getSelectionContext(myTestDoc, [1, 2]);
+            const selCtx = getSelectionContext(myTestDoc, [2, 3]);
             assert.equal(selCtx.mockEditor.object.selection.anchor.line, 8);
             assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
             assert.equal(selCtx.mockEditor.object.selection.end.line, 11);
@@ -227,7 +251,7 @@ do
             assert.equal(myTestDoc.doc[1], "one");
             assert.equal(myTestDoc.doc[3], " ");
 
-            const pos = {"0": [3, 0]};
+            const pos = {"1": [3, 0]};
             Object.entries(pos).forEach(([k, v]) => {
                 const m = myTestDoc.marks.get(k);
                 assert.exists(m);
@@ -236,7 +260,7 @@ do
                 }
             });
 
-            const selCtx = getSelectionContext(doc, 0);
+            const selCtx = getSelectionContext(doc, 1);
             assert.equal(selCtx.mockEditor.object.selection.anchor.line, 3);
             assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
 
@@ -250,7 +274,7 @@ do
             assert.equal(myTestDoc.doc[1], "one");
             assert.equal(myTestDoc.doc[3], " ");
 
-            const pos = {"0": [1, 0], "1": [3, 1]};
+            const pos = {"1": [1, 0], "2": [3, 1]};
             Object.entries(pos).forEach(([k, v]) => {
                 const m = myTestDoc.marks.get(k);
                 assert.exists(m);
@@ -259,7 +283,7 @@ do
                 }
             });
 
-            const selCtx = getSelectionContext(doc, [0,1]);
+            const selCtx = getSelectionContext(doc, [1, 2]);
             assert.equal(selCtx.mockEditor.object.selection.anchor.line, 1);
             assert.equal(selCtx.mockEditor.object.selection.anchor.character, 0);
             assert.equal(selCtx.mockEditor.object.selection.end.line, 3);
