@@ -171,7 +171,14 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
 
         let range = new Range(selection.start.line, selection.start.character, selection.end.line, selection.end.character);
 
-        if(nothingSelected){
+        if(
+            nothingSelected
+            || (
+                selectionType === ReplSelectionType.MULTI
+                && selection.start.line === selection.end.line
+                && this.normalizeLine(document.lineAt(selection.start.line).text).length === 0
+            )
+        ){
             let newRange = this.checkLineAboveOrBelow(selection.end.line, document, selectionType === ReplSelectionType.MULTI);
             if(newRange === null){
                 return null;
@@ -190,10 +197,12 @@ class FuzzySelectionStrategy implements ISelectionStrategy{
             let selectionEndIndent = this._numLeadingWhitespace(document.lineAt(range.end.line).text);
             
             let startLine = range.start.line;
-            if( nothingSelected
-                || document.lineAt(range.start.line).text.trim() !== ''
-                || range.end.line === range.start.line
-            ){
+            /*
+            only got up the block is nothing has been selected, i.e. the user
+            has not specified what code to execute. single line selections that
+            are empty are handled above using checkLineAboveOrBelow
+            */
+            if(nothingSelected){
                 for(let sl = startLine-1;sl>=0;sl--){
                     const line = document.lineAt(sl).text;
                     if(startIndent == 0){

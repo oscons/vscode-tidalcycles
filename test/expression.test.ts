@@ -260,13 +260,14 @@ suite("Editor", () => {
                         }
                         return x;
                     }, []).map((docBatch, batchNum, batches) => {
-                        test(t.l+" (test:"+(testNum+1)+"/"+tests.length+", batch:"+batchNum+"/"+batches.length+")", () =>{
+                        test(t.l+" (test:"+(testNum+1)+"/"+tests.length+", batch:"+(batchNum+1)+"/"+batches.length+")", () =>{
                             docBatch.map(({doc, docNum}) => {
                                 const errMsg = "Failed on doc "+docNum;
                                 let testDoc = typeof doc === 'string' ? doc.split(/\r?\n/) :  doc;
                                 let normalize = (x:string) => x.replace(/[.]/g,' ').replace(/,/g,"\t");
 
                                 // TODO: comments should probably be fuzzed over the doc
+                                // TODO: make one extra run with a large doc by adding ~ 1000 lines to start and bottom each
                                 testDoc = testDoc
                                             .map(normalize)
                                             .map(x => x.trim().length === 0 ? x : x+" -- comment -- still a comment");
@@ -278,6 +279,9 @@ suite("Editor", () => {
                                 let expression = getExpression(ctx, selectionType);
 
                                 if(typeof result === 'undefined'){
+                                    if(!(expression === null || expression.length === 0)){
+                                        expression = getExpression(ctx, selectionType);
+                                    }
                                     assert.isTrue(expression === null || expression.length === 0, errMsg);
                                 }
                                 else {
