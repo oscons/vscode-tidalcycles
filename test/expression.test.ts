@@ -129,21 +129,21 @@ suite("Editor", () => {
     type TestInfo = ({
         doc: (string | string[])[]
         , sel: (number | string | number[] | string[])
-        , res: Map<ReplSelectionType, undefined | string | string[]>
+        , res: Map<ReplSelectionType, string[]>
         , l: string
     });
 
     let bm = (
-        ...args:(ReplSelectionType | undefined | string | string[])[]) => {
-        let m = new Map<ReplSelectionType, undefined | string[]>();
+        ...args:(ReplSelectionType | string | string[])[]) => {
+        let m = new Map<ReplSelectionType, string[]>();
             
         if(typeof args !== 'undefined' && args.length > 0){
             if(args.length % 2 == 1){
                 throw new Error("Argument count unbalanced");
             }
             for(let i=0;i<args.length;i+=2){
-                let v = args[i+1] as undefined | string | string[];
-                if(typeof v !== 'undefined' && !Array.isArray(v)){
+                let v = args[i+1] as string | string[];
+                if(typeof v === 'string'){
                     v = [v]
                 }
                 m.set(args[i] as ReplSelectionType, v);
@@ -193,14 +193,24 @@ suite("Editor", () => {
                 {l:"No selection, one line, blank, far between blocks", sel: 1
                     , doc:  [["?","","one"],["one","","?","","two"],["one","","?"],["?","","....one"]
                             , ["one","","?","","....two"],["....one","","?"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, [])}
                 , {l:"No selection, one line, blank, close between, top level", sel: 1
                     , doc: [["two","?","three"],["two","?","three","","four"]
                             , ["","two","?","three"],["one","","two","?","three","","four"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two","three"])}
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, ["two","three"])}
                 , {l:"No selection, one line, blank, close between, indented blocks", sel: 1
-                    , doc: [["one","?","....two"],["....one","?","........two"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["one\r\n....two"])}
+                    , doc: [["one","?","....two"],["....one","?","........two"]
+                            ,["....one","?","........two","three"],["....one","?","........two","..three"]
+                            ,["........start","....one","?","........two"]]
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, ["one\r\n....two"])}
+                , {l:"No selection, one line, blank, close between, indented blocks", sel: 1
+                    , doc: [["one","...........?.........","....two","........three","....four","........five"]
+                            , ["one","....two","..?","........three","....four","........five"]
+                            , ["one","....two","..........?","........three","....four","........five"]
+                            , ["one","....two","........three","..?","....four","........five"]
+                            , ["one","....two","........three","....four","..?","........five"]
+                        ]
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, ["one\r\n....two\r\n........three\r\n....four\r\n........five"])}
                 , {l:"No selection, one line, blank, above block", sel: 1
                     , doc: [["?","one","","two"],["start","","?","one","","two"],["?","one","","two","","end"]]
                     , res: bm(ReplSelectionType.SINGLE, "one", ReplSelectionType.MULTI, "one")}
@@ -212,27 +222,49 @@ suite("Editor", () => {
                     , doc: [["two","three","?"],["one","","two","three","?"],["one","","two","three","?","","four"]
                             , ["....two","....three","?"], ["....two","....three","?","","four"]]
                     , res: bm(ReplSelectionType.SINGLE, "three", ReplSelectionType.MULTI, ["two", "three"])}
-                , {l:"No selection, one line, not blank", sel: 1
+                , {l:"No selection, one line, not blank, top level", sel: 1
                     , doc: [["?two","three"],["tw?o","three"],["two?","three"]
                             , ["one","","?two","three"],["one","","tw?o","three"],["one","","two?","three"]
                             , ["one","","?two","three","","four"],["one","","tw?o","three","","four"],["one","","two?","three","","four"]
                             , ["....?two","....three"],["....tw?o","....three"],["....two?","....three"]
                             , ["....?two","....three","four"],["....tw?o","....three","four"],["....two?","....three","four"]
                     ]
-                    , res: bm(ReplSelectionType.SINGLE, "two", ReplSelectionType.MULTI, ["two", "three"])}
+                , res: bm(ReplSelectionType.SINGLE, "two", ReplSelectionType.MULTI, ["two", "three"])}
+                    , {l:"No selection, one line, not blank, with block", sel: 1
+                    , doc: [
+                        ["one","..two","","?three","..four","....five","....six","..seven","..eight","","nine"]
+                        , ["one","..two","","three","..?four","....five","....six","..seven","..eight","","nine"]
+                        , ["one","..two","","three","..four","....?five","....six","..seven","..eight","","nine"]
+                        , ["one","..two","","three","..four","....five","....?six","..seven","..eight","","nine"]
+                        , ["one","..two","","three","..four","....five","....six","..?seven","..eight","","nine"]
+                        , ["one","..two","","three","..four","....five","....six","..seven","..?eight","","nine"]
+                        , ["one","..two","","th?ree","","-- c","-- c","..four","","-- c","","....five","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","?","-- c","-- c","..four","","-- c","","....five","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-?- c","..four","","-- c","","....five","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four?","","-- c","","....five","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","?","....five","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....fi?ve","","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....five","?","....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....five","","?....six","","","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....five","","....six","","?","..seven","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....five","","....six","","","..seven?","","","..eight","nine"]
+                        , ["one","..two","","three","","-- c","-- c","..four","","-- c","","....five","","....six","","","..seven","?","","..eight","nine"]
+                    ]
+                    , res: bm(ReplSelectionType.MULTI, ["three\r\n..four\r\n....five\r\n....six\r\n..seven\r\n..eight"])}
                 , {l:"With selection, one line, blank", sel: [1,2]
                     , doc: [["one","two","..?..?..","","three"],["","two","?....?..","","three"],["","two","?....?","","three"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two"])}
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, ["two"])}
                 , {l:"With selection, one line, blank", sel: [1,2]
                     , doc: [["one","two","..?..?..","....three"],["","two","?....?..","....three"],["","two","?....?","....three"]
                             ,["one","two","..?..?..","....three","four"],["","two","?....?..","....three","four"],["","two","?....?","....three","four"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, ["two\r\n....three"])}
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, ["two\r\n....three"])}
                 , {l:"With selection, multi line, blank, below block", sel: [1, 2]
                     , doc: [["one","two","..?..",".....?..","","three"],["one","two","","..?..",".....?..","three"]
                         ,["one","two","..?..",".....?..","three"],["one","two","","..?..",".....?..","","three"]]
-                    , res: bm(ReplSelectionType.SINGLE, undefined, ReplSelectionType.MULTI, undefined)}
-                // , {l:"With selection, one line", sel: ["a","b"]
-                //     , res: bm(ReplSelectionType.SINGLE, "on", ReplSelectionType.MULTI, ["one"])}
+                    , res: bm(ReplSelectionType.SINGLE, [], ReplSelectionType.MULTI, [])}
+                , {l:"With selection, one line", sel: [1, 2]
+                    , doc: [["one","?tw?o","three"], ["....one","....?tw?o","....three"], ["....one","....?tw?o","........three"]]
+                    , res: bm(ReplSelectionType.SINGLE, "tw", ReplSelectionType.MULTI, ["two"])}
                 // , {l:"With selection, multi line", sel: ["a","c"]
                 //     , res: bm(ReplSelectionType.SINGLE, ["one", "t"], ReplSelectionType.MULTI, ["one","two"])}
                 // , {l:"No selection, one line, indented", sel: "d"
@@ -262,7 +294,12 @@ suite("Editor", () => {
                     }, []).map((docBatch, batchNum, batches) => {
                         test(t.l+" (test:"+(testNum+1)+"/"+tests.length+", batch:"+(batchNum+1)+"/"+batches.length+")", () =>{
                             docBatch.map(({doc, docNum}) => {
-                                const errMsg = "Failed on doc "+docNum;
+                                const result = t.res.get(selectionType);
+                                if(typeof result === 'undefined'){ // skip
+                                    return doc;
+                                }
+
+                                const errMsg = "Failed on doc "+(docNum+1);
                                 let testDoc = typeof doc === 'string' ? doc.split(/\r?\n/) :  doc;
                                 let normalize = (x:string) => x.replace(/[.]/g,' ').replace(/,/g,"\t");
 
@@ -270,28 +307,30 @@ suite("Editor", () => {
                                 // TODO: make one extra run with a large doc by adding ~ 1000 lines to start and bottom each
                                 testDoc = testDoc
                                             .map(normalize)
-                                            .map(x => x.trim().length === 0 ? x : x+" -- comment -- still a comment");
-                                
-                                const result = t.res.get(selectionType);
-                                
+                                            .map(x => x.trim().length === 0 || x.indexOf("--") >= 0 ? x : x+" -- comment -- still a comment");
+
                                 const ctx = generateContext(testDoc, t.sel, "fuzzy");
                                 
                                 let expression = getExpression(ctx, selectionType);
 
-                                if(typeof result === 'undefined'){
-                                    if(!(expression === null || expression.length === 0)){
-                                        expression = getExpression(ctx, selectionType);
+                                
+                                assert.isNotNull(expression, errMsg);
+                                if (expression !== null) {
+                                    if(expression.length != result.length){
+                                        expression = getExpression(ctx, selectionType); 
                                     }
-                                    assert.isTrue(expression === null || expression.length === 0, errMsg);
-                                }
-                                else {
-                                    assert.isNotNull(expression, errMsg);
-                                    if (expression !== null) {
-                                        expect(expression.length).to.be.equal(result.length, errMsg);
+                                    expect(expression.length).to.be.equal(
+                                        result.length
+                                        , errMsg + "\n"
+                                            + "expected: " + JSON.stringify(result.map(normalize))+"\n"
+                                            + "actual: "+JSON.stringify(expression.map(x => x.expression))+"\n"
+                                        );
 
-                                        for(let j=0;j<expression.length;j++){
-                                            expect(expression[j].expression).to.be.equal(normalize(result[j]), errMsg);
+                                    for(let j=0;j<expression.length;j++){
+                                        if(expression[j].expression !== normalize(result[j])){
+                                            expression = getExpression(ctx, selectionType); 
                                         }
+                                        expect(expression[j].expression).to.be.equal(normalize(result[j]), errMsg);
                                     }
                                 }
                             });
