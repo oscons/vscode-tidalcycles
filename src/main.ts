@@ -6,9 +6,6 @@ import { Ghci } from './ghci';
 import { Tidal } from './tidal';
 import { History } from './history';
 import { TidalLanguageHelpProvider } from './codehelp';
-import * as path from 'path';
-import * as yaml from 'js-yaml';
-import { readFileSync } from 'fs';
 import { SoundBrowserSoundsView } from './soundbrowser';
 
 export function activate(context: ExtensionContext) {
