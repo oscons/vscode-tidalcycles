@@ -1,7 +1,7 @@
 # Tidal Cycles VS Code extension
 
 **Note** This is *not* the official repository. The offifical repository lives
-[here](https://github.com/tidalcycles/vscode-extension)
+[here](https://github.com/tidalcycles/vscode-tidalcycles)
 
 ## General info
 
@@ -14,7 +14,7 @@ The sortcuts feature allows you to set up shortcuts for Tidal commands. While
 the 1-9 predefined commands are useful, here are some more advanced
 configuration ideas for your `keybindings.json`:
 
-~~~~
+```JSON
     {
         "key": "cmd+t cmd+s"
         , "command": "tidal.shortcut"
@@ -64,6 +64,6 @@ configuration ideas for your `keybindings.json`:
             "command": "xfadeIn #s# 8 $ #c#"
         }
     }
-~~~~
+```
 
 
