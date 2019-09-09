@@ -14,7 +14,7 @@ The sortcuts feature allows you to set up shortcuts for Tidal commands. While
 the 1-9 predefined commands are useful, here are some more advanced
 configuration ideas for your `keybindings.json`:
 
-```JSON
+```json
     {
         "key": "cmd+t cmd+s"
         , "command": "tidal.shortcut"
